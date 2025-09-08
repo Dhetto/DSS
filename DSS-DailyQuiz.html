@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tiny Quiz (Token)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:system-ui,Arial,Helvetica,sans-serif;max-width:800px;margin:24px auto;padding:0 16px}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:16px 0}
+    button{padding:10px 16px;border-radius:10px;border:1px solid #bbb;cursor:pointer}
+    .meta{color:#666;font-size:12px}
+    .error{color:#b00020}
+  </style>
+</head>
+<body>
+  <h1>Tiny Quiz</h1>
+
+  <div id="status" class="card">Checking your access…</div>
+
+  <div id="intro" class="card" style="display:none">
+    <p>Hello, <strong id="pname"></strong> — your quiz is ready.</p>
+    <p class="meta">Timer starts when you click “Start Quiz”.</p>
+    <button id="startBtn">Start Quiz</button>
+    <span id="timer" style="margin-left:12px;font-weight:bold;"></span>
+  </div>
+
+  <form id="quizForm" class="card" style="display:none">
+    <input type="hidden" id="quizId" value="quiz-001">
+
+    <div>
+      <p><strong>1) Capital of Oman?</strong></p>
+      <label><input type="radio" name="q1" value="Muscat"> Muscat</label><br>
+      <label><input type="radio" name="q1" value="Salalah"> Salalah</label><br>
+      <label><input type="radio" name="q1" value="Sohar"> Sohar</label>
+    </div>
+    <hr>
+    <div>
+      <p><strong>2) 8 × 7 = ?</strong></p>
+      <input type="number" name="q2" placeholder="Your answer">
+    </div>
+    <hr>
+    <div>
+      <p><strong>3) Which are GIS desktop apps?</strong> (Select all)</p>
+      <label><input type="checkbox" name="q3" value="ArcGIS Pro"> ArcGIS Pro</label><br>
+      <label><input type="checkbox" name="q3" value="QGIS"> QGIS</label><br>
+      <label><input type="checkbox" name="q3" value="Photoshop"> Photoshop</label>
+    </div>
+
+    <div style="margin-top:16px">
+      <button type="submit">Submit</button>
+    </div>
+  </form>
+
+  <div id="result" class="card" style="display:none"></div>
+
+  <script>
+    const BACKEND_URL = https://script.google.com/macros/s/AKfycbysgdN_Eow2qlS_-_uuqow_NVyC1nYHMtDgna-Awi8u_IDgDCQiXarrKwGVYszjZxAr/exec';
+
+    const ANSWER_KEY = { q1:'Muscat', q2:'56', q3:['ArcGIS Pro','QGIS'] };
+    const POINTS = { q1:1, q2:1, q3:1 };
+
+    function getToken(){ return new URLSearchParams(location.search).get('token'); }
+    function arraysEqual(a,b){ return [...a].sort().join('|') === [...b].sort().join('|'); }
+
+    const statusEl = document.getElementById('status');
+    const introEl = document.getElementById('intro');
+    const pnameEl = document.getElementById('pname');
+    const formEl = document.getElementById('quizForm');
+    const resultEl = document.getElementById('result');
+    const timerEl = document.getElementById('timer');
+    const startBtn = document.getElementById('startBtn');
+    const quizIdEl = document.getElementById('quizId');
+
+    let token = null, startTime = null, timerInterval = null;
+
+    async function preflight(){
+      token = getToken();
+      if(!token){
+        statusEl.innerHTML = '<span class="error">Missing token. Please use your personal link.</span>';
+        return;
+      }
+      try{
+        const res = await fetch(`${BACKEND_URL}?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if(!data.ok){
+          statusEl.innerHTML = `<span class="error">${data.error || 'Access denied.'}</span>`;
+          return;
+        }
+        pnameEl.textContent = data.participant?.name || 'Participant';
+        statusEl.style.display = 'none';
+        introEl.style.display = 'block';
+      }catch(e){
+        statusEl.innerHTML = `<span class="error">Network error. Please try again later.</span>`;
+      }
+    }
+
+    function computeRawScore(fd){
+      let s = 0;
+      const q1 = fd.get('q1');
+      if(q1 === ANSWER_KEY.q1) s += POINTS.q1;
+      const q2 = (fd.get('q2') || '').trim();
+      if(q2 === ANSWER_KEY.q2) s += POINTS.q2;
+      const q3 = fd.getAll('q3');
+      if(q3.length && arraysEqual(q3, ANSWER_KEY.q3)) s += POINTS.q3;
+      return s;
+    }
+
+    startBtn.addEventListener('click', () => {
+      if(startTime) return;
+      startTime = Date.now();
+      formEl.style.display = 'block';
+      startBtn.disabled = true;
+      timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - startTime)/1000);
+        timerEl.textContent = `Time: ${s}s`;
+      }, 200);
+    });
+
+    formEl.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if(!startTime){ alert('Click Start Quiz first.'); return; }
+      clearInterval(timerInterval);
+
+      const fd = new FormData(formEl);
+      const raw = computeRawScore(fd);
+      const timeSec = Math.floor((Date.now() - startTime)/1000);
+
+      const answers = {};
+      for(const [k,v] of fd.entries()){
+        if(!answers[k]) answers[k] = [];
+        answers[k].push(v);
+      }
+
+      try{
+        const res = await fetch(BACKEND_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            token,
+            quiz_id: quizIdEl.value,
+            raw_score: raw,
+            time_sec: timeSec,
+            answers_json: answers,
+            user_agent: navigator.userAgent
+          })
+        });
+        const data = await res.json();
+        if(!data.ok){
+          alert(data.error || 'Submit failed');
+          return;
+        }
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = `
+          <h3>Result</h3>
+          <p>Raw score: <strong>${raw}</strong></p>
+          <p>Time: <strong>${timeSec}s</strong></p>
+          <p>Multiplier: <strong>${data.multiplier.toFixed(2)}</strong></p>
+          <p>Final score: <strong>${data.final_score}</strong></p>
+        `;
+        formEl.style.display = 'none';
+      }catch(err){
+        alert('Network error: ' + err);
+      }
+    });
+
+    preflight();
+  </script>
+</body>
+</html>
