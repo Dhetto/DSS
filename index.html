@@ -33,7 +33,7 @@
   <div id="result" class="hidden"></div>
 
   <script>
-    // CHANGE THIS to your latest Web App URL (ends with /exec)
+    // 👉 Replace with your latest Web App URL (must end with /exec)
     const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwm5mehpSU96-jHoqv14eAvB7eW0lJbhlLGcR3JCCEBC1Hgfjo2FjjaJ04kLHMPggry/exec';
 
     const token = new URLSearchParams(location.search).get('token');
@@ -45,13 +45,15 @@
 
     let startTime, timerInt;
 
-    // 1. Validate token
+    // --- 1. Validate token on load ---
     if (!token) {
       statusEl.textContent = "Missing token in URL.";
     } else {
+      console.log("GET check:", `${BACKEND_URL}?token=${token}`);
       fetch(`${BACKEND_URL}?token=${encodeURIComponent(token)}`)
         .then(r => r.json())
         .then(data => {
+          console.log("GET response:", data);
           if (data.ok) {
             statusEl.classList.add('hidden');
             welcomeEl.textContent = "Welcome, " + data.participant.name;
@@ -62,11 +64,12 @@
           }
         })
         .catch(err => {
-          statusEl.textContent = "Network error: " + err;
+          console.error(err);
+          statusEl.textContent = "Network error (GET): " + err;
         });
     }
 
-    // 2. Timer
+    // --- 2. Timer ---
     function startTimer() {
       startTime = Date.now();
       timerInt = setInterval(() => {
@@ -75,36 +78,42 @@
       }, 1000);
     }
 
-    // 3. Submit handler
+    // --- 3. Submit handler ---
     document.getElementById('quizForm').addEventListener('submit', e => {
       e.preventDefault();
       clearInterval(timerInt);
 
       const elapsed = Math.floor((Date.now() - startTime)/1000);
 
-      // Simple scoring logic
+      // Simple scoring
       let rawScore = 0;
       const answers = {};
       const form = new FormData(e.target);
-      if (form.get('q1') === '4') { rawScore++; }
-      if (form.get('q2') === 'Muscat') { rawScore++; }
+      if (form.get('q1') === '4') rawScore++;
+      if (form.get('q2') === 'Muscat') rawScore++;
       answers.q1 = form.get('q1');
       answers.q2 = form.get('q2');
 
-      // 4. Send to backend
+      const payload = {
+        token,
+        quiz_id: "quiz-001",
+        raw_score: rawScore,
+        time_sec: elapsed,
+        answers_json: answers,
+        user_agent: navigator.userAgent
+      };
+
+      console.log("POSTing to:", BACKEND_URL, payload);
+
+      // --- 4. POST to backend ---
       fetch(BACKEND_URL, {
         method: 'POST',
-        body: JSON.stringify({
-          token,
-          quiz_id: "quiz-001",
-          raw_score: rawScore,
-          time_sec: elapsed,
-          answers_json: answers,
-          user_agent: navigator.userAgent
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
       .then(r => r.json())
       .then(data => {
+        console.log("POST response:", data);
         quizEl.classList.add('hidden');
         resultEl.classList.remove('hidden');
         if (data.ok) {
@@ -114,8 +123,9 @@
         }
       })
       .catch(err => {
+        console.error("POST error:", err);
         resultEl.classList.remove('hidden');
-        resultEl.textContent = "Network error: " + err;
+        resultEl.textContent = "Network error (POST): " + err;
       });
     });
   </script>
