@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <h1>DSS Quiz</h1>
+  <h1>DSS Quiz 2</h1>
 
   <div id="status">Checking your access…</div>
   <div id="quiz" class="hidden">
@@ -34,7 +34,7 @@
 
   <script>
     // 👉 Replace with your latest Web App URL (must end with /exec)
-    const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwm5mehpSU96-jHoqv14eAvB7eW0lJbhlLGcR3JCCEBC1Hgfjo2FjjaJ04kLHMPggry/exec';
+    const BACKEND_URL = 'https://script.google.com/macros/s/AKfycb.../exec';
 
     const token = new URLSearchParams(location.search).get('token');
     const statusEl = document.getElementById('status');
@@ -65,7 +65,7 @@
         })
         .catch(err => {
           console.error(err);
-          statusEl.textContent = "Network error2 (GET): " + err;
+          statusEl.textContent = "Network error (GET): " + err;
         });
     }
 
